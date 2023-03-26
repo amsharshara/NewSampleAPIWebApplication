@@ -1,34 +1,108 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.Text;
 using System.Xml.Linq;
 using WebApplication16.DB;
 
 namespace WebApplication16
 {
+    public class car
+    {
+
+        public int id { get; set; }
+
+        public string name { get; set; }
+    }
+    public class Auth
+    {
+        public string Handler { get; set; }
+    }
     public class Program
     {
         public static void Main(string[] args)
         {
-            var builder=WebApplication.CreateBuilder(args);
-            builder.Services.AddScoped<ICarsRespoitory, CarRespoitory>();
+            var builder = WebApplication.CreateBuilder(args);
+
+            builder.Services.AddAuthentication(s =>
+            {
+                s.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                s.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                s.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+
+            }
             
+           
+                ).AddJwtBearer(s =>
+            {
+                var key = System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:key"]);
+
+                s.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                {
+                    ValidateIssuer= true,
+                    ValidateAudience=true,
+                    ValidateLifetime=true,
+                    ValidIssuer = builder.Configuration["Jwt:issuer"],
+                    ValidAudience= builder.Configuration["Jwt:aud"],
+                    IssuerSigningKey =new SymmetricSecurityKey(key)
+
+                };
+            });
+
+            builder.Services.AddScoped<ICarsRespoitory, CarRespoitory>();
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             //
-            var app=builder.Build();
-            if(app.Environment.IsDevelopment())
+            var app = builder.Build();
+            //call api from console
+            app.MapGet("/msg", () => "hi ");
+            app.MapGet("/msg/{txt}", IResult (string txt) =>
+            {
+                return Results.Ok($"say hi to:{txt}");
+            });
+            app.MapPost("/msg", ([FromHeader] int id) => $"id={id}");
+            //
+            app.MapPost("/msglst", IResult (List<car>lst)=> {
+            
+                return Results.Ok($"count={lst.Count}");
+                    
+            });
+            //
+            app.MapPost("/auth", ([FromHeader]string username, [FromHeader] string password,IConfiguration conf) =>
+            {
+                var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(conf["Jwt:Key"]));
+                var jwt = new JwtSecurityToken(conf["Jwt:issuer"],
+                    conf["Jwt:aud"],
+                    null, null, DateTime.Now.AddDays(1),
+                    new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+                //
+                var hand = new JwtSecurityTokenHandler().WriteToken(jwt);
+                //
+                return Results.Ok(new Auth() { Handler = hand});
+            });
+            app.MapGet("/newAuth", () => "test auth").RequireAuthorization();
+
+            if (app.Environment.IsDevelopment())
             {
                app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI();
+               app.UseSwagger();
+               app.UseSwaggerUI();
                 
             }
-           
+
+            app.UseRouting();
+            app.UseHttpsRedirection();
+            app.UseAuthentication();
+            app.UseAuthorization();
             app.MapControllers();
             app.Run();
 
-        
-            
+
+
         }
         //public static  void Main(string[] args)
         //{
@@ -93,5 +167,5 @@ namespace WebApplication16
         //    //app.Run();
         //}
     }
-   
+  
 }
